@@ -1,4 +1,4 @@
-# SCRIPT TO MAKE RADIO IMAGES IN SUBPLOTS USING APLPY
+# SCRIPT TO MAKE RADIO IMAGES AT DIFFERENT FREQUENCIES IN SUBPLOTS USING APLPY
 # IT CREATES A FIGURE WITH 1xN (WHERE N IS THE NUMBER OF FREQUECIES) OR 2X4 (TOP ROW: FULL VISIBILITIES; BOTTOM ROW: SOURCE SUBTRACTED; COLUMN 1-4: FULL RES, TAPER 25KPC/10arcsec, 50KPC/15arcsec, 100KPC/30arcsec) PANELS
 # To run in the folder where the telescope/cluster is
 #
@@ -6,6 +6,7 @@
 #
 # G. Di Gennaro
 # Sept 2023
+
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -26,11 +27,7 @@ from astropy.coordinates import SkyCoord
 from astropy.cosmology import FlatLambdaCDM
 from astropy.utils.data import get_pkg_data_filename
 from reproject import reproject_interp
-#from palettable.cubehelix import classic_16 as cmap
-#from palettable.cubehelix import jim_special_16 as cmap
 from palettable.cubehelix  import red_16 as cmap
-#from palettable.cmocean.sequential import Ice_20 as cmap
-#from palettable.matplotlib import Inferno_4 as cmap
 
 if not sys.warnoptions:
   import warnings
@@ -80,11 +77,13 @@ def makeradiofigure(fitsname, z, radec, clustername, IMAGEDIR, Mpcwidth=[0.5,0.5
   print (clustername, z, radec, width)
 
   imax = int(len(fitsname))
-  irow = int(round(imax/4))
-  if irow == 0:
-    irow = 1
-  icol = int(imax/irow)
-  
+  irow = int(round(imax/4)) # 4 cols
+
+  if imax <= 5:
+    irow, icol = 1, imax
+  else:
+    icol = int(imax/irow)
+
   figs = plt.figure( figsize=(icol*4, irow*4))
   for i in range(0, imax):
     print (fitsname[i])
@@ -97,43 +96,25 @@ def makeradiofigure(fitsname, z, radec, clustername, IMAGEDIR, Mpcwidth=[0.5,0.5
     
     # define subplot limits
     dx, dy = 0.8/icol, 0.7/irow
-    if irow == 1:
-      if i == 0:
-        rahide = False
-        dechide = False
-      else:
-        rahide = False
-        dechide = True
-      xin, yin = 0.1 + ((dx+0.01)*i), 0.15 
-    
-    elif irow == 2:
-      if i == 0:
-        rahide = True
-        dechide = False
-      elif 0 < i < 4:
-        rahide = True
-        dechide = True
-      elif i == 4:
-        rahide = False
-        dechide = False
-      elif i > 4:
-        rahide = False
-        dechide = True
+    xin, yin = 0.1 + ( (dx+0.01) * (i - (icol * int(i/icol))) ), 0.13 + ( int(i/icol)*(dy+0.05) )
 
-      if i < 4: 
-        xin, yin = 0.1 + ( (dx+0.01)*i ), 0.54
-      else:
-        xin, yin = 0.1 + ( (dx+0.01)*(i-4) ), 0.1
+    if i == 0:
+      rahide = dechide = False
+    elif i in np.arange(0, imax, icol):
+      rahide, dechide = True, False
+    elif i in np.arange(1, icol):
+      rahide, dechide = False, True
+    else:
+      rahide, dechide = True, True
 
-    print (xin, yin, dx, dy)
+    print (i, xin, yin, dx, dy)
+ 
 
     # APLPY
     fig = aplpy.FITSFigure(fitsname[i], slices=[0,0], figure=figs, subplot=[xin, yin, dx, dy])
     fix_aplpy_fits(fig)
     
-    #fig.show_colorscale(vmin=vmin, vmax=vmax, stretch='power', exponent=0.5, cmap=cmap.mpl_colormap, smooth=1)
     fig.show_colorscale(vmin=vmin, vmax=vmax, stretch='log', cmap=cmap.mpl_colormap, smooth=1)
-    #fig.show_colorscale(vmin=vmin, vmax=vmax, stretch='arcsinh', cmap=cmap.mpl_colormap, smooth=1)
     
     fig.axis_labels.set_xtext('Right Ascension (J2000)')
     fig.axis_labels.set_ytext('Declination (J2000)')
@@ -172,8 +153,16 @@ def makeradiofigure(fitsname, z, radec, clustername, IMAGEDIR, Mpcwidth=[0.5,0.5
       fig.show_circles(radec[0],radec[1],0.5*scalebarlengthdeg,edgecolor="white",linestyle=(0,(10,5)),linewidth=1.)
       fig.show_markers(radec[0],radec[1],marker='x',s=30,facecolor='white',linewidth=0.75)   
     
+    if i == 2:
+      try:
+        #name = hdulist[0].header['OBJECT'].strip()
+        fig.show_regions(clustername+"_radio_features_im.reg")
+      except:
+        print ("no region file")
+      #  continue
+
     scale = Mpcwidth[0]/4.
-    fig.add_scalebar(scale*scalebarlengthdeg, str(int(scale*1e3))+" kpc",color="white",corner="bottom",linewidth=1.5,fontsize=10) 
+    fig.add_scalebar(scale*scalebarlengthdeg, str(int(scale*1e3))+" kpc",color="white",corner="bottom right",linewidth=1.5,fontsize=10) 
 
     fig.add_beam(facecolor='crimson',edgecolor='crimson',corner='bottom left',frame=True,alpha=0.7)
     bmaj = round(hdulist[0].header['BMAJ'],4)*3600
@@ -181,6 +170,7 @@ def makeradiofigure(fitsname, z, radec, clustername, IMAGEDIR, Mpcwidth=[0.5,0.5
     bpa  = round(hdulist[0].header['BPA'],4)
 
     telescope = hdulist[0].header['TELESCOP'].strip()
+    if telescope == "GMRT": telescope = "uGMRT"
     freq = str(round(hdulist[0].header['CRVAL3']/1.e6))
     
     print ("RESOLUTION [arcsecXarcxsec, deg]:", round(bmaj,1), "x", round(bmin,1), round(bpa))
@@ -216,8 +206,8 @@ def makeradiofigure(fitsname, z, radec, clustername, IMAGEDIR, Mpcwidth=[0.5,0.5
         drop2axes(fitsname[i], fitsname[i]+'.contours')
         fig.show_contour(fitsname[i]+'.contours', slices=[0,0], dimensions=[0,1], levels=levelsr, colors='lightgray', smooth=3, overlap=True,linewidths=1.,alpha=0.5)
 
-  name = hdulist[0].header['OBJECT'].strip()
-  figs.suptitle(name, fontsize=20)
+  #name = hdulist[0].header['OBJECT'].strip()
+  figs.suptitle(clustername, fontsize=20)
   figs.tight_layout()
 
   figs.savefig(imagename+".pdf")
@@ -230,7 +220,7 @@ def makeradiofigure(fitsname, z, radec, clustername, IMAGEDIR, Mpcwidth=[0.5,0.5
 parser = argparse.ArgumentParser(description='Make radio figures of galaxy cluster(s) for different tapers. We need to have the FITS file in a folder named as the clustername.')
 
 parser.add_argument('-i','--clustername', help='Name of cluster, including band default=image', required=False, type=str)
-parser.add_argument('--DATADIR', help='directory where to find the cluster folder',required=True, type=str)
+parser.add_argument('--DATADIR', help='directory where to find the cluster folders',required=True, type=str)
 parser.add_argument('--z', help='redshift of cluster',required=True, type=float)
 parser.add_argument('--RA', help='RA of cluster in deg', required=False, type=float)
 parser.add_argument('--DEC', help='DEC of cluster in deg', required=False, type=float)
@@ -249,41 +239,39 @@ width				= args['size']
 DATADIR     = args['DATADIR']+'/*/'+clustername+'/'
 # DATADIR = '/export/data/group-brueggen/digennaro/Shapley'
 
-allsources = diffuse = []
-if not args['doalltelescopes']: # for single frequency
-  allsources = [sorted(glob.glob(DATADIR+"*_maskROBUST*0*uvmin*-MFS-image.fits"))[0]] +\
+imagelist = []
+if not args['doalltelescopes']: # single frequency w taper
+  imagelist = [sorted(glob.glob(DATADIR+"*_maskROBUST*0*uvmin*-MFS-image.fits"))[0]] +\
                 natsort.natsorted(glob.glob(DATADIR+"*_maskROBUST*0*uvmin*TAPER*-MFS-image.fits"))
 
-  if args['dodiffuse']:
-    diffuse   = [sorted(glob.glob(DATADIR+"*_submaskROBUST*0*uvmin*-MFS-image.fits"))[0]] +\
+  if args['dodiffuse']: # single frequency - source subtracted image w tapered
+    imagelist   = [sorted(glob.glob(DATADIR+"*_submaskROBUST*0*uvmin*-MFS-image.fits"))[0]] +\
                   natsort.natsorted(glob.glob(DATADIR+"*_masksubROBUST*0*uvmin*TAPER*-MFS-image.fits"))
     
     imagename = args['DATADIR']+"/images/%s_allresolution_diffuse"%clustername
   else:
     imagename = args['DATADIR']+"/images/%s_allresolution"%clustername
 
-else: #for N number of frequencies
-  #allsources = natsort.natsorted(glob.glob(args['DATADIR']+"/uGMRT/"+clustername+"_band?/*_maskROBUST*0*uvminNone-MFS-image.fits")) +\
-  #            glob.glob(args['DATADIR']+"/MeerKAT/"+clustername+"*_Lband/*_maskROBUST*0*uvminNone-MFS-image.fits") #MeerKAT
+else: #for N number of frequencies w/o taper
+  imagelist = glob.glob(args['DATADIR']+"/uGMRT/"+clustername[0:5]+"_band3/*_maskROBUST-0.5uvminNone-MFS-image.fits") +\
+                glob.glob(args['DATADIR']+"/uGMRT/"+clustername+"_band4/*_maskROBUST-0.5uvminNone-MFS-image.fits") +\
+                glob.glob(args['DATADIR']+"/MeerKAT/"+clustername+"/*_maskROBUST-0.5uvminNone-MFS-image.fits")
 
-  allsources = glob.glob(args['DATADIR']+"/uGMRT/"+clustername[0:5]+"_band3/*_maskROBUST*0*uvminNone-MFS-image.fits") +\
-                glob.glob(args['DATADIR']+"/uGMRT/"+clustername+"_band4/*_maskROBUST*0*uvminNone-MFS-image.fits") +\
-                glob.glob(args['DATADIR']+"/MeerKAT/"+clustername+"/*_maskROBUST*0*uvminNone-MFS-image.fits") +\
-                glob.glob(args['DATADIR']+"/MeerKAT/"+clustername+"/*-MFS-image.fits") 
-                #glob.glob(args['DATADIR']+"/uGMRT/"+clustername+"_band5/*_maskROBUST*0*uvminNone-MFS-image.fits") +\
+  if args['dodiffuse']: #for N number of frequencies w taper
+    imagelist   = glob.glob(args['DATADIR']+"/MeerKAT/"+clustername+"/*_maskROBUST-0.5uvminNone-MFS-image.fits") +\
+                  natsort.natsorted(glob.glob(args['DATADIR']+"/MeerKAT/"+clustername+"/*_maskROBUST-0.5uvminNoneTAPER??-MFS-image.fits")) +\
+                  glob.glob(args['DATADIR']+"/uGMRT/"+clustername+"_band4/*_maskROBUST-0.5uvminNone-MFS-image.fits") +\
+                  natsort.natsorted(glob.glob(args['DATADIR']+"/uGMRT/"+clustername+"_band4/*_maskROBUST-0.5uvminNoneTAPER??-MFS-image.fits")) +\
+                  glob.glob(args['DATADIR']+"/uGMRT/"+clustername[0:5]+"_band3/*_maskROBUST-0.5uvminNone-MFS-image.fits") +\
+                  natsort.natsorted(glob.glob(args['DATADIR']+"/uGMRT/"+clustername[0:5]+"_band3/*_maskROBUST-0.5uvminNoneTAPER??-MFS-image.fits"))
 
-  if args['dodiffuse']:
-    diffuse   = glob.glob(args['DATADIR']+"/uGMRT/"+clustername[0:5]+"_band3/*_maskROBUST*0*uvmin*TAPER*-MFS-image.fits") +\
-                  glob.glob(args['DATADIR']+"/uGMRT/"+clustername+"_band4/*_maskROBUST*0*uvmin*TAPER*-MFS-image.fits") +\
-                  glob.glob(args['DATADIR']+"/uGMRT/"+clustername+"_band5/*_maskROBUST*0*uvmin*TAPER*-MFS-image.fits") +\
-                  glob.glob(args['DATADIR']+"/MeerKAT/"+clustername+"/*_maskROBUST*0*uvmin*TAPER*-MFS-image.fits") 
-  
     imagename = args['DATADIR']+"/images/%s_alltelescope_diffuse"%clustername
   else:
     imagename = args['DATADIR']+"/images/%s_alltelescope"%clustername
 
-  
-imagelist = allsources + diffuse
+
+#imagelist = allsources + diffuse
+
 print (imagelist)
 
 makeradiofigure(imagelist, z, [ra,dec], clustername, imagename, Mpcwidth=[width,width], docircle=args['docircle'])
