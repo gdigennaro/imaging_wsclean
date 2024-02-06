@@ -96,8 +96,11 @@ def makeradiofigure(fitsname, z, radec, clustername, IMAGEDIR, Mpcwidth=[0.5,0.5
     
     # define subplot limits
     dx, dy = 0.8/icol, 0.7/irow
-    xin, yin = 0.1 + ( (dx+0.01) * (i - (icol * int(i/icol))) ), 0.13 + ( int(i/icol)*(dy+0.05) )
-
+    if irow == 1:
+      xin, yin = 0.1 + ( (dx+0.028) * (i - (icol * int(i/icol))) ), 0.15 + ( int(i/icol)*(dy+0.05) ) 
+    else:
+      xin, yin = 0.08 + ( (dx+0.028) * (i - (icol * int(i/icol))) ), 0.13 + ( int(i/icol)*(dy+0.05) )
+      
     if i == 0:
       rahide = dechide = False
     elif i in np.arange(0, imax, icol):
@@ -206,6 +209,17 @@ def makeradiofigure(fitsname, z, radec, clustername, IMAGEDIR, Mpcwidth=[0.5,0.5
         drop2axes(fitsname[i], fitsname[i]+'.contours')
         fig.show_contour(fitsname[i]+'.contours', slices=[0,0], dimensions=[0,1], levels=levelsr, colors='lightgray', smooth=3, overlap=True,linewidths=1.,alpha=0.5)
 
+    if docolorbar:
+      fig.add_colorbar()
+      fig.colorbar.set_location('right')
+      fig.colorbar.set_font(size=8) # tick font
+      cbar_factor = np.array([1.,2.,4.,8.,16., 32.,64.]) #check your own best ticks
+      levelcbar = np.ndarray.tolist(cbar_factor*rms)
+      fig.colorbar.set_ticks(levelcbar)
+      cbarlabel = [r"$1\rm\sigma_{rms}$", r"$2\rm\sigma_{rms}$", r"$4\rm\sigma_{rms}$", r"$8\rm\sigma_{rms}$", r"$16\rm\sigma_{rms}$", r"$32\rm\sigma_{rms}$", r"$64\rm\sigma_{rms}$"]
+      fig.colorbar._colorbar.ax.set_yticklabels(cbarlabel)
+
+  
   #name = hdulist[0].header['OBJECT'].strip()
   figs.suptitle(clustername, fontsize=20)
   figs.tight_layout()
@@ -225,10 +239,11 @@ parser.add_argument('--z', help='redshift of cluster',required=True, type=float)
 parser.add_argument('--RA', help='RA of cluster in deg', required=False, type=float)
 parser.add_argument('--DEC', help='DEC of cluster in deg', required=False, type=float)
 parser.add_argument('--size', help='Size of the optical image in Mpc', default=1.0, required=True, type=float)
-parser.add_argument('--docircle', help='in addition to normal imaging, also makes tapered images in uv units', action='store_true')
-parser.add_argument('--dodiffuse', help='add also row with only diffuse emission', action='store_true')
+parser.add_argument('--addcircle', help='in addition to normal imaging, also makes tapered images in uv units', action='store_true')
+parser.add_argument('--addcolorbar', help='in addition to normal imaging, also makes tapered images in uv units', action='store_true')
 parser.add_argument('--doalltelescopes', help='panels with all frequencies', action='store_true')
-
+parser.add_argument('--dotaperonly', help='only low resolution', action='store_true')
+parser.add_argument('--dodiffuse', help='full and low resolution', action='store_true')
 
 args = vars(parser.parse_args())
 clustername	= args['clustername']
@@ -237,7 +252,6 @@ ra 				  = args['RA']
 dec					= args['DEC']
 width				= args['size']
 DATADIR     = args['DATADIR']+'/*/'+clustername+'/'
-# DATADIR = '/export/data/group-brueggen/digennaro/Shapley'
 
 imagelist = []
 if not args['doalltelescopes']: # single frequency w taper
@@ -257,7 +271,15 @@ else: #for N number of frequencies w/o taper
                 glob.glob(args['DATADIR']+"/uGMRT/"+clustername+"_band4/*_maskROBUST-0.5uvminNone-MFS-image.fits") +\
                 glob.glob(args['DATADIR']+"/MeerKAT/"+clustername+"/*_maskROBUST-0.5uvminNone-MFS-image.fits")
 
-  if args['dodiffuse']: #for N number of frequencies w taper
+  if args['dotaperonly']:
+  imagelist   = natsort.natsorted(glob.glob(args['DATADIR']+"/uGMRT/"+clustername[0:5]+"_band3/*_maskROBUST*0*uvminNoneTAPER??-MFS-image.fits")) +\
+                natsort.natsorted(glob.glob(args['DATADIR']+"/uGMRT/"+clustername+"_band4/*_maskROBUST*0*uvminNoneTAPER??-MFS-image.fits")) +\
+                natsort.natsorted(glob.glob(args['DATADIR']+"/MeerKAT/"+clustername[0:5]+"N/*_maskROBUST-0.5uvminNoneTAPER??-MFS-image.fits"))
+                   
+  imagename = args['DATADIR']+"/images/%s_alltelescope_onlytaper"%clustername
+
+  
+  elif args['dodiffuse']: #for N number of frequencies w taper
     imagelist   = glob.glob(args['DATADIR']+"/MeerKAT/"+clustername+"/*_maskROBUST-0.5uvminNone-MFS-image.fits") +\
                   natsort.natsorted(glob.glob(args['DATADIR']+"/MeerKAT/"+clustername+"/*_maskROBUST-0.5uvminNoneTAPER??-MFS-image.fits")) +\
                   glob.glob(args['DATADIR']+"/uGMRT/"+clustername+"_band4/*_maskROBUST-0.5uvminNone-MFS-image.fits") +\
