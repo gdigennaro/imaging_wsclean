@@ -270,13 +270,12 @@ else: #for N number of frequencies w/o taper
   imagelist = glob.glob(args['DATADIR']+"/uGMRT/"+clustername[0:5]+"_band3/*_maskROBUST-0.5uvminNone-MFS-image.fits") +\
                 glob.glob(args['DATADIR']+"/uGMRT/"+clustername+"_band4/*_maskROBUST-0.5uvminNone-MFS-image.fits") +\
                 glob.glob(args['DATADIR']+"/MeerKAT/"+clustername+"/*_maskROBUST-0.5uvminNone-MFS-image.fits")
-
   if args['dotaperonly']:
-  imagelist   = natsort.natsorted(glob.glob(args['DATADIR']+"/uGMRT/"+clustername[0:5]+"_band3/*_maskROBUST*0*uvminNoneTAPER??-MFS-image.fits")) +\
+    imagelist   = natsort.natsorted(glob.glob(args['DATADIR']+"/uGMRT/"+clustername[0:5]+"_band3/*_maskROBUST*0*uvminNoneTAPER??-MFS-image.fits")) +\
                 natsort.natsorted(glob.glob(args['DATADIR']+"/uGMRT/"+clustername+"_band4/*_maskROBUST*0*uvminNoneTAPER??-MFS-image.fits")) +\
                 natsort.natsorted(glob.glob(args['DATADIR']+"/MeerKAT/"+clustername[0:5]+"N/*_maskROBUST-0.5uvminNoneTAPER??-MFS-image.fits"))
                    
-  imagename = args['DATADIR']+"/images/%s_alltelescope_onlytaper"%clustername
+    imagename = args['DATADIR']+"/images/%s_alltelescope_onlytaper"%clustername
 
   
   elif args['dodiffuse']: #for N number of frequencies w taper
