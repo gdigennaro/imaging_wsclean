@@ -22,7 +22,12 @@ from astropy.cosmology import FlatLambdaCDM
 cosmo = FlatLambdaCDM(H0=70, Om0=0.3)
 
 def cleanup():
-  #os.system('rm -rf *-00*.fits') # remove channel maps
+  if not os.path.exists:
+    os.mkdir("./singlechannels/")
+  os.system('mv *-00*.fits ./singlechannels/.')
+  if not os.path.exists("./masks/"):
+    os.mkdir("./masks/")
+  os.system("mv ./*mask.fits ./masks/.")
   os.system('rm -rf *_subROBUST*.fits') # remove non-masked images
   os.system('rm -rf *_ROBUST*fits') # remove non-masked images
   os.system('rm -rf *-dirty.fits') # remove all dirty images
@@ -87,7 +92,7 @@ def makeimage(mslist, imageout, pixsize, imsize, channelsout=6, niter=15000, rob
     else:
       imsizein  =  np.int(imsize*(pixsize/(uvtaper/5.)))
       pixsizein = np.int(uvtaper/5.)
-      if np.float(pixsizein) < pixsize: # to deal with rounding issues which cause a 0arcsec pixelsize
+      if float(pixsizein) < pixsize: # to deal with rounding issues which cause a 0arcsec pixelsize
         pixsizein = pixsize
         imsizein  = imsize
 
@@ -100,7 +105,7 @@ def makeimage(mslist, imageout, pixsize, imsize, channelsout=6, niter=15000, rob
     imsizein = 512
 
 
-  baselineav = 2.5e3*60000.*2.*np.pi *np.float(pixsizein)/(24.*60.*60*np.float(imsizein)) 
+  baselineav = 2.5e3*60000.*2.*np.pi *float(pixsizein)/(24.*60.*60*float(imsizein)) 
 
   # limit baseline averaging to 10, fixes prob
   if baselineav > 10.0:
@@ -163,10 +168,15 @@ def makeimage(mslist, imageout, pixsize, imsize, channelsout=6, niter=15000, rob
     cmd += '-no-update-model-required ' 
   elif telescope == "uGMRT":
     cmd += '-pol RR '
-    #cmd += '-pol I '
+    cmd += '-gridder wstacking '
+    cmd += '-apply-primary-beam '
   elif telescope == "JVLA":
+    cmd += '-apply-primary-beam '
     cmd += '-pol I '
-    #cmd += '-apply-primary-beam -use-differential-lofar-beam '
+    cmd += '-gridder wstacking '
+  elif telescope == 'MeerKAT':
+    cmd += '-pol I '
+    cmd += '-gridder wstacking '
     
   cmd += '-name ' + imageout + ' -scale ' + str(pixsizein) + 'arcsec '
 
@@ -293,7 +303,7 @@ parser.add_argument('--imsize', help='image size, you can take it from selfcal.l
 parser.add_argument('-n', '--niter', help='niter, default=35000', default=35000, type=int)
 parser.add_argument('--robust', help='Briggs robust paramter, default=-0.5', default=-0.5, type=float)
 parser.add_argument('--channelsout', help='channelsout, default=6', default=6, type=int)
-parser.add_argument('--minuv', help='inner uv-cut for image in lambda', type=float)
+parser.add_argument('--minuv', help='inner uv-cut for image in lambda', type=int)
 parser.add_argument('--pixelscale', help='pixels size in arcsec, deafult=1.5', default=1.5, type=float)
 parser.add_argument('--sourceLLS', help='size in Mpc of diffuse emission for uvcut, deafult=0.4', default=0.4, type=float)
 parser.add_argument('--z', help='redshift of cluster, not required if --nodosub is used', default=-1.0, type=float)
@@ -321,8 +331,6 @@ taperskpc = args['taperkpc']
 imsize    = args['imsize']
 telescope = args['array']
 
-#DATADIR = "/lofar2/bba3185/HighRedshiftClusters/"+telescope+"/"+imageout+"/"
-#mslist  = glob.glob(DATADIR+ms)
 
 #if args['boxfile'] == None and args['imsize'] == None:
   #print ('Incomplete input detected, either boxfile or imsize is required')
@@ -361,13 +369,15 @@ if args['z'] < 0: # if no redshift provided try to find it automatically
 
 
 if args['dosub']:
-  if  telescope == "LOFAR" or telescope == "uGMRT":
-    columnsub = "DIFFUSE_SUB"
+  #if  telescope == "LOFAR" or telescope == "uGMRT":
+  #  columnsub = "DIFFUSE_SUB"
 
-  elif telescope == "JVLA":
+  if telescope == "JVLA":
     # TO BE ADDED: add check that we are using the *ms.sub measurementsets
     columnsub = "CORRECTED_DATA"
-
+  else:
+    columnsub = "DIFFUSE_SUB"
+  
   if args['z'] < 0:
     print ('You need provide a redshift, none was given')
     sys.exit()
@@ -379,11 +389,11 @@ if args['dosub']:
   
   #subtractcompact(mslist, imageout, pixsize, imsize, minuv_forsub, channelsout=args['channelsout'], niter=np.int(niter), robust=robust, outcolumn='DIFFUSE_SUB')
 
-
-if telescope == "LOFAR":
-  minuv = 80
-else:
-  minuv = None
+if not args['minuv']:
+  if telescope == "LOFAR":
+    minuv = 80
+  else:
+    minuv = None
 
 if args['dosub']:
   #  -----------------------------------------------------------------------------
@@ -446,30 +456,35 @@ if args['dosub']:
       print ("no redshift for the conversion in kpc")
       #sys.exit()        
 
+if True:
+  ##  --------------------------------
+  ##  --- make the standard image ----
+  ##  --------------------------------  
+  makeimage(mslist, imageout +'_ROBUST'+str(robust)+'uvmin'+str(minuv), pixsize, imsize, channelsout=args['channelsout'], niter=niter, robust=robust, minuv=minuv, predict=False)
 
-##  --------------------------------
-##  --- make the standard image ----
-##  --------------------------------
-makeimage(mslist, imageout +'_ROBUST'+str(robust)+'uvmin'+str(minuv), pixsize, imsize, channelsout=args['channelsout'], niter=niter, robust=robust, minuv=minuv, predict=False)
+  # make a mask
+  imagename  = imageout +'_ROBUST'+str(robust)+'uvmin'+str(minuv) + '-MFS-image.fits'
+  cmdm  = makemask + ' --Th='+ str(args['maskthreshold']) + ' --RestoredIm=' + imagename
+  print (cmdm)
+  os.system(cmdm)
 
-# make a mask
-imagename  = imageout +'_ROBUST'+str(robust)+'uvmin'+str(minuv) + '-MFS-image.fits'
-cmdm  = makemask + ' --Th='+ str(args['maskthreshold']) + ' --RestoredIm=' + imagename
-print (cmdm)
-os.system(cmdm)
+  fitsmask = imagename + '.mask.fits'
 
-fitsmask = imagename + '.mask.fits'
+  # re-image with mask
+  makeimage(mslist, imageout +'_maskROBUST'+str(robust)+'uvmin'+str(minuv), pixsize, imsize, channelsout=args['channelsout'], niter=niter, robust=robust, minuv=minuv, multiscale=True, predict=False, fitsmask=fitsmask, deepmultiscale=False)
 
-# re-image with mask
-makeimage(mslist, imageout +'_maskROBUST'+str(robust)+'uvmin'+str(minuv), pixsize, imsize, channelsout=args['channelsout'], niter=niter, robust=robust, minuv=minuv, multiscale=True, predict=False, fitsmask=fitsmask, deepmultiscale=False)
 
+if False: 
+  #  --------------------------------------------------
+  #  --- make the high-res image robust -2.0 image ---
+  #  --------------------------------------------------
+  makeimage(mslist, imageout +'_maskROBUST-2.0'+'uvmin'+str(minuv), pixsize, imsize, channelsout=args['channelsout'], niter=niter, robust=-2.0, minuv=minuv, multiscale=True, predict=False, fitsmask=fitsmask, deepmultiscale=False)
 
 if True: 
   #  --------------------------------------------------
   #  --- make the high-res image robust -1.25 image ---
   #  --------------------------------------------------
   makeimage(mslist, imageout +'_maskROBUST-1.25'+'uvmin'+str(minuv), pixsize, imsize, channelsout=args['channelsout'], niter=niter, robust=-1.25, minuv=minuv, multiscale=True, predict=False, fitsmask=fitsmask, deepmultiscale=False)
-
 
  
 if args['dotaper']:
