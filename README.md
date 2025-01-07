@@ -7,7 +7,7 @@ For uGMRT observations, the number of channels is the same as the SP2B.ms; for J
 
 It requires the singularity as it also runs MakeMask.py to improve the cleaning. It uses WSClean 3.4 or above to be able to run -apply-primary-beam (see https://wsclean.readthedocs.io/en/latest/primary_beam_correction.html)
 
-To run in the cluster folder
+To run in the same folder where the MS are stored.
 
 # LOFAR 
 python make_cluster_images.py -i CLUSETRNAME --z REDSHIFT --imsize IMSIZE --array LOFAR --dosub --dotaperkpc --dotaper *ms*
