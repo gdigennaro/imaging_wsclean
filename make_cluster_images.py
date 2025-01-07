@@ -1,6 +1,6 @@
 """
 Script to make radio images with the following telescopes:
-LOFAR, uGMRT, JVLA.
+LOFAR, uGMRT, JVLA, MeerKAT.
 To be run inside the singularity.
 For more information, open README
 """
@@ -79,11 +79,7 @@ def adjustniter_for_taper(taper, niter):
 def makeimage(mslist, imageout, pixsize, imsize, channelsout=6, niter=15000, robust=-0.5, minuv=120, uvtaper=None, multiscale=False, predict=True,fitsmask=None, deepmultiscale=False, cluster_redshift=None, column=None):
 
   # some setup
-  username = os.getlogin()
-  if username == 'rvweeren':
-    wsclean = '/net/lofar1/data1/sweijen/software/LOFAR/latest/wsclean/bin/wsclean'
-  else:
-    wsclean = 'wsclean'
+  wsclean = 'wsclean'
 
 
   if uvtaper != None:
@@ -154,8 +150,6 @@ def makeimage(mslist, imageout, pixsize, imsize, channelsout=6, niter=15000, rob
       print ('fitsmask: ', fitsmask, 'does not exist')
       sys.exit()
   else:
-    #cmd += '-auto-mask 1.0 -auto-threshold 0.5 '
-    #cmd += '-auto-mask 2.0 -auto-threshold 1.0 '
     cmd += '-auto-mask 3.0 -auto-threshold 1.5 '
 
   if uvtaper != None:
@@ -233,11 +227,7 @@ def makeimage(mslist, imageout, pixsize, imsize, channelsout=6, niter=15000, rob
  
 def subtractcompact(mslist, imageout, pixsize, imsize, minuv, channelsout=6, niter=25000, robust=-0.5, outcolumn='DIFFUSE_SUB'):
   # some setup
-  username = os.getlogin()
-  if username == 'digennaro':
-    makemask = '/net/para10/data1/shimwell/software/killmsddf/new-install/DDFacet/SkyModel/MakeMask.py'
-  else:
-    makemask = 'MakeMask.py'
+  makemask = 'MakeMask.py'
   
   makeimage(mslist, imageout +'_compact', pixsize, imsize, channelsout=channelsout, niter=niter, robust=robust, minuv=minuv, multiscale=True, predict=False)
 
@@ -272,28 +262,17 @@ def subtractcompact(mslist, imageout, pixsize, imsize, minuv, channelsout=6, nit
       model = ts.getcol('MODEL_DATA') 
       ts.putcol(outcolumn,data-model)
       ts.close()
-  #  
+   
   #THE JVLA DOESN'T ALLOW THE CREATION OF A NEW DATA COLUMN. WE THEREFORE NEED TO COPY THE DATASET IN A NEW ONE, AND OVERWRITE THE CORRECTED_DATA
   elif outcolumn == 'CORRECTED_DATA':
     for ms in mslist:
-      #if 'CORRECTED_DATA' in t.colnames():
-      print(ms+': Using CORRECTED_DATA-MODEL_DATA')
-      os.system("taql 'update " + ms + " set CORRECTED_DATA=CORRECTED_DATA-MODEL_DATA'")
-      
-      #else:
-      #  print('Using DATA-MODEL_DATA') 
-      #  os.system("taql 'update " + msnew + " set CORRECTED_DATA=DATA-MODEL_DATA'") 
+      subms = ms.replace('.ms','.sub.ms')
+      os.system('cp '+ms+' '+subms)
+      print(subms+': Using CORRECTED_DATA-MODEL_DATA')
+      os.system("taql 'update " + subms + " set CORRECTED_DATA=CORRECTED_DATA-MODEL_DATA'")
 
   return
  
- 
- 
-# some setup
-username = os.getlogin()
-if username == 'digennaro':
-  makemask = '/net/para10/data1/shimwell/software/killmsddf/new-install/DDFacet/SkyModel/MakeMask.py'
-else:
-  makemask = 'MakeMask.py'
  
  
 parser = argparse.ArgumentParser(description='Make images from extraction run. Requires working version of the DR2-pipeline software and WSClean (Oct 2018 or newer)')
@@ -369,11 +348,7 @@ if args['z'] < 0: # if no redshift provided try to find it automatically
 
 
 if args['dosub']:
-  #if  telescope == "LOFAR" or telescope == "uGMRT":
-  #  columnsub = "DIFFUSE_SUB"
-
   if telescope == "JVLA":
-    # TO BE ADDED: add check that we are using the *ms.sub measurementsets
     columnsub = "CORRECTED_DATA"
   else:
     columnsub = "DIFFUSE_SUB"
@@ -381,12 +356,10 @@ if args['dosub']:
   if args['z'] < 0:
     print ('You need provide a redshift, none was given')
     sys.exit()
-
   
   minuv_forsub = compute_uvmin(args['z'], args['sourceLLS'])
 
   subtractcompact(mslist, imageout, pixsize, imsize, minuv_forsub, channelsout=args['channelsout'], niter=np.int(niter/1.25), robust=robust, outcolumn=columnsub)
-  
   #subtractcompact(mslist, imageout, pixsize, imsize, minuv_forsub, channelsout=args['channelsout'], niter=np.int(niter), robust=robust, outcolumn='DIFFUSE_SUB')
 
 if not args['minuv']:
