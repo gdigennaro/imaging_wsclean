@@ -10,19 +10,22 @@ It requires the singularity as it also runs MakeMask.py to improve the cleaning.
 To run in the cluster folder
 
 # LOFAR 
-python ~/digennaro/scripts/make_cluster_images.py -i CLUSETRNAME --z REDSHIFT --imsize IMSIZE --array LOFAR --dosub --dotaperkpc --dotaper *ms*
+python make_cluster_images.py -i CLUSETRNAME --z REDSHIFT --imsize IMSIZE --array LOFAR --dosub --dotaperkpc --dotaper *ms*
 
 # JVLA Lband
-python ~/digennaro/scripts/make_cluster_images.py -i CLUSETRNAME --z REDSHIFT --imsize IMSIZE --imsize 4000 --array JVLA --robust 0 --channelsout=16 --pixelscale=1.0 --niter 40000 --dosub --dotaper --dotaperkpc allconf/*ms [allconf folder when we combine multiple array configurations]
+python make_cluster_images.py -i CLUSETRNAME --z REDSHIFT --imsize IMSIZE --array JVLA --robust 0 --channelsout=16 --pixelscale=1.0 --niter NITER --dosub --dotaper --dotaperkpc allconf/*ms [allconf folder when we combine multiple array configurations]
 
 # JVLA Sband
-python ~/digennaro/scripts/make_cluster_images.py -i CLUSETRNAME --z REDSHIFT --imsize IMSIZE --imsize 4000 --array JVLA --robust 0 --channelsout=16 --pixelscale=0.5 --niter 40000 --dosub --dotaper --dotaperkpc allconf/*ms [allconf folder when we combine multiple array configurations]
+python make_cluster_images.py -i CLUSETRNAME --z REDSHIFT --imsize IMSIZE --array JVLA --robust 0 --channelsout=16 --pixelscale=0.5 --niter NITER --dosub --dotaper --dotaperkpc allconf/*ms [allconf folder when we combine multiple array configurations]
 
 # uGMRT band3
-python ~/digennaro/scripts/make_cluster_images.py -i CLUSETRNAME --z REDSHIFT --imsize 4000  --array uGMRT --channelsout=N_SP2B --pixelscale=2.0 --dosub --dotaper --dotaperkpc *ms
+python make_cluster_images.py -i CLUSETRNAME --z REDSHIFT --imsize 4000  --array uGMRT --channelsout=N_SP2B --pixelscale=2.0 --dosub --dotaper --dotaperkpc *ms
 
 # uGMRT band4
-python ~/digennaro/scripts/make_cluster_images.py -i CLUSETRNAME --z REDSHIFT  --imsize 4000 --array uGMRT --channelsout=N_SP2B --pixelscale=1.0 --dosub --dotaper --dotaperkpc *ms
+python make_cluster_images.py -i CLUSETRNAME --z REDSHIFT  --imsize 4000 --array uGMRT --channelsout=N_SP2B --pixelscale=1.0 --dosub --dotaper --dotaperkpc *ms
 
 # uGMRT band5
-python ~/digennaro/scripts/make_cluster_images.py -i CLUSETRNAME --z REDSHIFT  --imsize 4000 --array uGMRT --channelsout=N_SP2B --robust=0 --pixelscale=0.5 *.ms
+python make_cluster_images.py -i CLUSETRNAME --z REDSHIFT  --imsize 4000 --array uGMRT --channelsout=N_SP2B --robust=0 --pixelscale=0.5 *.ms
+
+# MeerKAT Lband
+python make_cluster_images.py -i CLUSETRNAME --z REDSHIFT --imsize IMSIZE --array MeerKAT --robust -0.5 --channelsout=8 --pixelscale=1.0 --niter NITER --dosub --dotaper --dotaperkpc *ms
