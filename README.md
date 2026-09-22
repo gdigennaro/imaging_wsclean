@@ -9,6 +9,8 @@ It requires the singularity as it also runs MakeMask.py to improve the cleaning.
 
 To run in the same folder where the MS are stored.
 
+Please, refer to this repository if you make use of any of this scripts.
+
 # LOFAR 
 python make_cluster_images.py -i CLUSETRNAME --z REDSHIFT --imsize IMSIZE --array LOFAR --dosub --dotaperkpc --dotaper *ms*
 
