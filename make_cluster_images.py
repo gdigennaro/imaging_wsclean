@@ -1,6 +1,6 @@
 """
 Script to make radio images with the following telescopes:
-LOFAR, uGMRT, JVLA, MeerKAT.
+LOFAR, uGMRT, JVLA.
 To be run inside the singularity.
 For more information, open README
 """
@@ -22,7 +22,7 @@ from astropy.cosmology import FlatLambdaCDM
 cosmo = FlatLambdaCDM(H0=70, Om0=0.3)
 
 def cleanup():
-  if not os.path.exists:
+  if not os.path.exists("./singlechannels/"):
     os.mkdir("./singlechannels/")
   os.system('mv *-00*.fits ./singlechannels/.')
   if not os.path.exists("./masks/"):
@@ -45,7 +45,7 @@ def getimsize(boxfile, cellsize=1.5):
   imsize = np.ceil(xs) # // Round up decimals to an integer
   if(imsize % 2 == 1):
       imsize = imsize + 1
-  return np.int(imsize)
+  return int(imsize)
 
 
 def compute_uvmin(redshift,sourceLLS):
@@ -58,36 +58,34 @@ def compute_uvmin(redshift,sourceLLS):
   return 1./(scalebarlengthdeg*np.pi/180.)
  
 def compute_taper(redshift,taperscale):
-    '''
-    taperscale in units of kpc
-    '''
-    oneradinmpc = cosmo.angular_diameter_distance(redshift)/(360./(2.*np.pi))
-    taper    = 1e-3*taperscale/(oneradinmpc.value)
-    
-    return taper*3600
+  '''
+  taperscale in units of kpc
+  '''
+  oneradinmpc = cosmo.angular_diameter_distance(redshift)/(360./(2.*np.pi))
+  taper    = 1e-3*taperscale/(oneradinmpc.value)
+  
+  return taper*3600
 
 def adjustniter_for_taper(taper, niter):
   if taper < 5:
-    return np.int(niter)
+    return int(niter)
   if taper >= 5 and taper < 15:
-    return np.int(niter/2)
+    return int(niter/2)
   if taper >= 15:
-    return np.int(niter/4)
+    return int(niter/4)
 
 
  
-def makeimage(mslist, imageout, pixsize, imsize, channelsout=6, niter=15000, robust=-0.5, minuv=120, uvtaper=None, multiscale=False, predict=True,fitsmask=None, deepmultiscale=False, cluster_redshift=None, column=None):
+def makeimage(mslist, imageout, pixsize, imsize, channelsout=6, niter=15000, robust=-0.5, minuv=120, uvtaper=None, multiscale=False, predict=True,fitsmask=None, deepmultiscale=False, cluster_redshift=None, column=None, dde=False):
 
-  # some setup
   wsclean = 'wsclean'
-
 
   if uvtaper != None:
     if uvtaper < 0:
       print ('Not supported uvtaper', uvtaper)
     else:
-      imsizein  =  np.int(imsize*(pixsize/(uvtaper/5.)))
-      pixsizein = np.int(uvtaper/5.)
+      imsizein  =  int(imsize*(pixsize/(uvtaper/5.)))
+      pixsizein = int(uvtaper/5.)
       if float(pixsizein) < pixsize: # to deal with rounding issues which cause a 0arcsec pixelsize
         pixsizein = pixsize
         imsizein  = imsize
@@ -100,7 +98,7 @@ def makeimage(mslist, imageout, pixsize, imsize, channelsout=6, niter=15000, rob
   if imsizein < 511: # otherwise images get too small for multiscales
     imsizein = 512
 
-
+  
   baselineav = 2.5e3*60000.*2.*np.pi *float(pixsizein)/(24.*60.*60*float(imsizein)) 
 
   # limit baseline averaging to 10, fixes prob
@@ -116,7 +114,7 @@ def makeimage(mslist, imageout, pixsize, imsize, channelsout=6, niter=15000, rob
   imcol = 'CORRECTED_DATA'
   print (mslist[0])
   t = pt.table(mslist[0],readonly=True) # just test for first ms in mslist
-  colnames =t.colnames()
+  colnames = t.colnames()
   if 'CORRECTED_DATA' not in colnames: # check which column to image
     imcol = 'DATA'
   t.close()
@@ -136,7 +134,7 @@ def makeimage(mslist, imageout, pixsize, imsize, channelsout=6, niter=15000, rob
   cmd += '-weighting-rank-filter 3 -clean-border 1 '
   cmd += '-mgain 0.8 -fit-beam -data-column ' + imcol + ' '
   cmd += '-join-channels -channels-out ' +str(channelsout) + ' -padding 1.4 '
-  #cmd += '-parallel-deconvolution ' + str(np.int(imsizein)/2) + ' ' 
+  #cmd += '-parallel-deconvolution ' + str(int(imsizein)/2) + ' ' 
   if multiscale:
     if predict:
       cmd += '-multiscale '+' -multiscale-scales 0,4,8,16 '
@@ -150,6 +148,8 @@ def makeimage(mslist, imageout, pixsize, imsize, channelsout=6, niter=15000, rob
       print ('fitsmask: ', fitsmask, 'does not exist')
       sys.exit()
   else:
+    #cmd += '-auto-mask 1.0 -auto-threshold 0.5 '
+    #cmd += '-auto-mask 2.0 -auto-threshold 1.0 '
     cmd += '-auto-mask 3.0 -auto-threshold 1.5 '
 
   if uvtaper != None:
@@ -158,7 +158,8 @@ def makeimage(mslist, imageout, pixsize, imsize, channelsout=6, niter=15000, rob
   if telescope == "LOFAR":
     cmd += '-fit-spectral-pol 3 '# -beam-shape 6arcsec 6arcsec 0deg '   
     cmd += '-pol I '
-    cmd += '-baseline-averaging ' + baselineav + ' '
+    if not dde:
+      cmd += '-baseline-averaging ' + baselineav + ' '
     cmd += '-no-update-model-required ' 
   elif telescope == "uGMRT":
     cmd += '-pol RR '
@@ -171,6 +172,12 @@ def makeimage(mslist, imageout, pixsize, imsize, channelsout=6, niter=15000, rob
   elif telescope == 'MeerKAT':
     cmd += '-pol I '
     cmd += '-gridder wstacking '
+
+  if dde:
+    h5sol = sorted(glob.glob('h5_solutions/*h5'))
+    h5solliststring = ','.join(map(str, h5sol))
+    cmd += '-facet-regions facet_regions/facets.reg '
+    cmd += '-apply-facet-solutions %s amplitude000,phase000 '%h5solliststring
     
   cmd += '-name ' + imageout + ' -scale ' + str(pixsizein) + 'arcsec '
 
@@ -192,10 +199,16 @@ def makeimage(mslist, imageout, pixsize, imsize, channelsout=6, niter=15000, rob
     cmdp = wsclean + ' -size '
     cmdp += str(imsizein) + ' ' + str(imsizein) + ' -channels-out ' + str(channelsout) + ' -padding 1.4 -predict '
 
+    if dde:
+      h5sol = sorted(glob.glob('h5_solutions/*h5'))
+      h5solliststring = ','.join(map(str, h5sol))
+      cmdp += '-facet-regions facet_regions/facets.reg '
+      cmdp += '-apply-facet-solutions %s amplitude000,phase000 '%h5solliststring
+    
     cmdp += '-name ' + imageout + ' -scale ' + str(pixsizein) + 'arcsec ' + msliststring
     print ('PREDICT STEP for continue: ', cmdp)
     os.system(cmdp)
-      
+
     # NOW continue cleaning  
     cmd += '-niter ' + str(niter/15) + ' -multiscale -continue ' + msliststring
     print ('WSCLEAN continue: ', cmd)
@@ -217,29 +230,36 @@ def makeimage(mslist, imageout, pixsize, imsize, channelsout=6, niter=15000, rob
         modeldata[idx] = 0.
         fits.writeto(model, modeldata, hdr, overwrite=True)
 
-
     cmd = wsclean + ' -size '
     cmd += str(imsizein) + ' ' + str(imsizein) + ' -channels-out ' + str(channelsout) + ' -padding 1.4 -predict '
+    
+    if dde:
+      h5sol = sorted(glob.glob('h5_solutions/*h5'))
+      h5solliststring = ','.join(map(str, h5sol))
+      cmd += '-facet-regions facet_regions/facets.reg '
+      cmd += '-apply-facet-solutions %s amplitude000,phase000 '%h5solliststring
+
     cmd += '-name ' + imageout + ' -scale ' + str(pixsizein) + 'arcsec ' + msliststring
     print ('PREDICT STEP: ', cmd)
     os.system(cmd)
  
  
 def subtractcompact(mslist, imageout, pixsize, imsize, minuv, channelsout=6, niter=25000, robust=-0.5, outcolumn='DIFFUSE_SUB'):
-  # some setup
+
   makemask = 'MakeMask.py'
-  
-  makeimage(mslist, imageout +'_compact', pixsize, imsize, channelsout=channelsout, niter=niter, robust=robust, minuv=minuv, multiscale=True, predict=False)
 
-  # make a mask
-  imagename  = imageout +'_compact' + '-MFS-image.fits'
-  cmdm  = makemask + ' --Th=1.0 --RestoredIm=' + imagename
-  print (cmdm)
-  os.system(cmdm)
-  fitsmask = imagename + '.mask.fits'
+  if len(glob.glob('*_compactmask-MFS-image.fits')) == 0:
+    makeimage(mslist, imageout +'_compact', pixsize, imsize, channelsout=channelsout, niter=niter, robust=robust, minuv=minuv, multiscale=True, predict=False, dde=args['dde'])
 
-  # re-image with mask
-  makeimage(mslist, imageout +'_compactmask', pixsize, imsize, channelsout=channelsout, niter=niter, robust=-0.5, minuv=minuv, multiscale=True, predict=True, fitsmask=fitsmask, deepmultiscale=False)
+    # make a mask
+    imagename  = imageout +'_compact' + '-MFS-image.fits'
+    cmdm  = makemask + ' --Th=1.0 --RestoredIm=' + imagename
+    print (cmdm)
+    os.system(cmdm)
+    fitsmask = imagename + '.mask.fits'
+
+    # re-image with mask
+    makeimage(mslist, imageout +'_compactmask', pixsize, imsize, channelsout=channelsout, niter=niter, robust=-0.5, minuv=minuv, multiscale=True, predict=True, fitsmask=fitsmask, deepmultiscale=False, dde=args['dde'])
 
   # now subtract the columns 
   if outcolumn == 'DIFFUSE_SUB':
@@ -262,18 +282,23 @@ def subtractcompact(mslist, imageout, pixsize, imsize, minuv, channelsout=6, nit
       model = ts.getcol('MODEL_DATA') 
       ts.putcol(outcolumn,data-model)
       ts.close()
-   
+  #  
   #THE JVLA DOESN'T ALLOW THE CREATION OF A NEW DATA COLUMN. WE THEREFORE NEED TO COPY THE DATASET IN A NEW ONE, AND OVERWRITE THE CORRECTED_DATA
   elif outcolumn == 'CORRECTED_DATA':
     for ms in mslist:
-      subms = ms.replace('.ms','.sub.ms')
-      os.system('cp '+ms+' '+subms)
-      print(subms+': Using CORRECTED_DATA-MODEL_DATA')
-      os.system("taql 'update " + subms + " set CORRECTED_DATA=CORRECTED_DATA-MODEL_DATA'")
+      #if 'CORRECTED_DATA' in t.colnames():
+      print(ms+': Using CORRECTED_DATA-MODEL_DATA')
+      os.system("taql 'update " + ms + " set CORRECTED_DATA=CORRECTED_DATA-MODEL_DATA'")
+      
+      #else:
+      #  print('Using DATA-MODEL_DATA') 
+      #  os.system("taql 'update " + msnew + " set CORRECTED_DATA=DATA-MODEL_DATA'") 
 
   return
  
  
+ 
+
  
 parser = argparse.ArgumentParser(description='Make images from extraction run. Requires working version of the DR2-pipeline software and WSClean (Oct 2018 or newer)')
 parser.add_argument('-b','--boxfile', help='optional boxfile to set imsize automatically', type=str)
@@ -295,6 +320,7 @@ parser.add_argument('--array', help='Interferometer used for the observation (LO
 parser.add_argument('--dotaper', help='in addition to normal imaging, also makes tapered images in uv units', action='store_true')
 parser.add_argument('--dotaperkpc', help='in addition to normal imaging, also makes tapered images in kpc units', action='store_true')
 parser.add_argument('--dosub', help='in addition to normal imaging, also subtract compact sources', action='store_true')
+parser.add_argument('--dde', help='in addition to normal imaging, also subtract compact sources', action='store_true')
 parser.add_argument('ms', nargs='*', help='msfile(s)')
 
 args = vars(parser.parse_args())
@@ -310,18 +336,24 @@ taperskpc = args['taperkpc']
 imsize    = args['imsize']
 telescope = args['array']
 
+print ('dosub:',args['dosub'])
+print ('dotaper:',args['dotaper'])
+print ('dotaperkpc:',args['dotaperkpc'])
+print ('dde:',args['dde'])
 
-#if args['boxfile'] == None and args['imsize'] == None:
-  #print ('Incomplete input detected, either boxfile or imsize is required')
-  #sys.exit()
-#if args['boxfile'] != None and args['imsize'] != None:
-  #print ('Wrong input detected, both boxfile and imsize are set')
-  #sys.exit()
+makemask = 'MakeMask.py' 
 
-#if args['boxfile'] != None:
-  #imsize   = int(getimsize(args['boxfile'], args['pixelscale']))
-#if args['imsize'] != None:
-  #imsize = int(args['imsize'])
+if args['boxfile'] == None and args['imsize'] == None:
+  print ('Incomplete input detected, either boxfile or imsize is required')
+  sys.exit()
+if args['boxfile'] != None and args['imsize'] != None:
+  print ('Wrong input detected, both boxfile and imsize are set')
+  sys.exit()
+
+if args['boxfile'] != None:
+  imsize   = int(getimsize(args['boxfile'], args['pixelscale']))
+elif args['imsize'] != None:
+  imsize = int(args['imsize'])
 
 
 if args['z'] < 0: # if no redshift provided try to find it automatically
@@ -349,6 +381,7 @@ if args['z'] < 0: # if no redshift provided try to find it automatically
 
 if args['dosub']:
   if telescope == "JVLA":
+    # TO BE ADDED: add check that we are using the *ms.sub measurementsets
     columnsub = "CORRECTED_DATA"
   else:
     columnsub = "DIFFUSE_SUB"
@@ -356,11 +389,13 @@ if args['dosub']:
   if args['z'] < 0:
     print ('You need provide a redshift, none was given')
     sys.exit()
+
   
   minuv_forsub = compute_uvmin(args['z'], args['sourceLLS'])
 
-  subtractcompact(mslist, imageout, pixsize, imsize, minuv_forsub, channelsout=args['channelsout'], niter=np.int(niter/1.25), robust=robust, outcolumn=columnsub)
-  #subtractcompact(mslist, imageout, pixsize, imsize, minuv_forsub, channelsout=args['channelsout'], niter=np.int(niter), robust=robust, outcolumn='DIFFUSE_SUB')
+  subtractcompact(mslist, imageout, pixsize, imsize, minuv_forsub, channelsout=args['channelsout'], niter=int(niter/1.25), robust=robust, outcolumn=columnsub)
+  
+  #subtractcompact(mslist, imageout, pixsize, imsize, minuv_forsub, channelsout=args['channelsout'], niter=int(niter), robust=robust, outcolumn='DIFFUSE_SUB')
 
 if not args['minuv']:
   if telescope == "LOFAR":
@@ -372,7 +407,7 @@ if args['dosub']:
   #  -----------------------------------------------------------------------------
   #  --- make the standard image robust -0.5 image, compact source subtracted ----
   #  -----------------------------------------------------------------------------
-  makeimage(mslist, imageout +'_subROBUST'+str(robust)+'uvmin'+str(minuv), pixsize, imsize, channelsout=args['channelsout'], niter=np.int(niter/1.5), robust=robust, minuv=minuv, column=columnsub, predict=False)
+  makeimage(mslist, imageout +'_subROBUST'+str(robust)+'uvmin'+str(minuv), pixsize, imsize, channelsout=args['channelsout'], niter=int(niter/1.5), robust=robust, minuv=minuv, column=columnsub, predict=False, dde=args['dde'])
 
   # make a mask
   imagename  = imageout +'_subROBUST'+str(robust)+'uvmin'+str(minuv) + '-MFS-image.fits'
@@ -382,7 +417,7 @@ if args['dosub']:
   fitsmask = imagename + '.mask.fits'
 
   # re-image with mask
-  makeimage(mslist, imageout +'_submaskROBUST'+str(robust)+'uvmin'+str(minuv), pixsize, imsize, channelsout=args['channelsout'], niter=np.int(niter/1.5), robust=robust, minuv=minuv, multiscale=True, predict=False, fitsmask=fitsmask, column=columnsub, deepmultiscale=False)    
+  makeimage(mslist, imageout +'_submaskROBUST'+str(robust)+'uvmin'+str(minuv), pixsize, imsize, channelsout=args['channelsout'], niter=int(niter/1.5), robust=robust, minuv=minuv, multiscale=True, predict=False, fitsmask=fitsmask, column=columnsub, deepmultiscale=False, dde=args['dde'])    
 
   if args['dotaper']:
     for t in np.array(tapers):
@@ -392,7 +427,7 @@ if args['dosub']:
 
       newniter = adjustniter_for_taper(t, niter)
       
-      makeimage(mslist, imageout +'_subROBUST'+str(robust)+'uvmin'+str(minuv)+'TAPER'+str(t), pixsize, imsize, channelsout=args['channelsout'], niter=newniter, robust=robust, minuv=minuv, predict=False, column=columnsub, uvtaper=float(t))
+      makeimage(mslist, imageout +'_subROBUST'+str(robust)+'uvmin'+str(minuv)+'TAPER'+str(t), pixsize, imsize, channelsout=args['channelsout'], niter=newniter, robust=robust, minuv=minuv, predict=False, column=columnsub, uvtaper=float(t), dde=args['dde'])
 
       # make a mask
       imagename  = imageout +'_subROBUST'+str(robust)+'uvmin'+str(minuv)+'TAPER'+str(t) + '-MFS-image.fits'
@@ -402,7 +437,7 @@ if args['dosub']:
       fitsmask = imagename + '.mask.fits'
 
       # re-image with mask
-      makeimage(mslist, imageout +'_masksubROBUST'+str(robust)+'uvmin'+str(minuv)+'TAPER'+str(t), pixsize, imsize, channelsout=args['channelsout'], niter=newniter, robust=robust, minuv=minuv, multiscale=True, predict=False, fitsmask=fitsmask, deepmultiscale=False, column=columnsub, uvtaper=float(t))
+      makeimage(mslist, imageout +'_masksubROBUST'+str(robust)+'uvmin'+str(minuv)+'TAPER'+str(t), pixsize, imsize, channelsout=args['channelsout'], niter=newniter, robust=robust, minuv=minuv, multiscale=True, predict=False, fitsmask=fitsmask, deepmultiscale=False, column=columnsub, uvtaper=float(t), dde=args['dde'])
 
   
   if args['dotaperkpc']:
@@ -414,7 +449,7 @@ if args['dosub']:
         newniter   = adjustniter_for_taper(compute_taper(args['z'], float(t)), niter)
         uvtaperkpc = compute_taper(args['z'], float(t))
 
-        makeimage(mslist, imageout +'_subROBUST'+str(robust)+'uvmin'+str(minuv)+'TAPER'+str(t)+'kpc', pixsize, imsize, channelsout=args['channelsout'], niter=newniter, robust=robust, minuv=minuv, predict=False, column=columnsub, uvtaper=uvtaperkpc)
+        makeimage(mslist, imageout +'_subROBUST'+str(robust)+'uvmin'+str(minuv)+'TAPER'+str(t)+'kpc', pixsize, imsize, channelsout=args['channelsout'], niter=newniter, robust=robust, minuv=minuv, predict=False, column=columnsub, uvtaper=uvtaperkpc, dde=args['dde'])
 
         # make a mask
         imagename  = imageout +'_subROBUST'+str(robust)+'uvmin'+str(minuv)+'TAPER'+str(t)+'kpc' + '-MFS-image.fits'
@@ -424,7 +459,7 @@ if args['dosub']:
         fitsmask = imagename + '.mask.fits'
 
         # re-image with mask
-        makeimage(mslist, imageout +'_masksubROBUST'+str(robust)+'uvmin'+str(minuv)+'TAPER'+str(t)+'kpc', pixsize, imsize, channelsout=args['channelsout'], niter=newniter, robust=robust, minuv=minuv, multiscale=True, predict=False, fitsmask=fitsmask, deepmultiscale=False, column=columnsub, uvtaper=uvtaperkpc)
+        makeimage(mslist, imageout +'_masksubROBUST'+str(robust)+'uvmin'+str(minuv)+'TAPER'+str(t)+'kpc', pixsize, imsize, channelsout=args['channelsout'], niter=newniter, robust=robust, minuv=minuv, multiscale=True, predict=False, fitsmask=fitsmask, deepmultiscale=False, column=columnsub, uvtaper=uvtaperkpc, dde=args['dde'])
     else:
       print ("no redshift for the conversion in kpc")
       #sys.exit()        
@@ -433,7 +468,7 @@ if True:
   ##  --------------------------------
   ##  --- make the standard image ----
   ##  --------------------------------  
-  makeimage(mslist, imageout +'_ROBUST'+str(robust)+'uvmin'+str(minuv), pixsize, imsize, channelsout=args['channelsout'], niter=niter, robust=robust, minuv=minuv, predict=False)
+  makeimage(mslist, imageout +'_ROBUST'+str(robust)+'uvmin'+str(minuv), pixsize, imsize, channelsout=args['channelsout'], niter=niter, robust=robust, minuv=minuv, predict=False, dde=args['dde'])
 
   # make a mask
   imagename  = imageout +'_ROBUST'+str(robust)+'uvmin'+str(minuv) + '-MFS-image.fits'
@@ -444,20 +479,20 @@ if True:
   fitsmask = imagename + '.mask.fits'
 
   # re-image with mask
-  makeimage(mslist, imageout +'_maskROBUST'+str(robust)+'uvmin'+str(minuv), pixsize, imsize, channelsout=args['channelsout'], niter=niter, robust=robust, minuv=minuv, multiscale=True, predict=False, fitsmask=fitsmask, deepmultiscale=False)
+  makeimage(mslist, imageout +'_maskROBUST'+str(robust)+'uvmin'+str(minuv), pixsize, imsize, channelsout=args['channelsout'], niter=niter, robust=robust, minuv=minuv, multiscale=True, predict=False, fitsmask=fitsmask, deepmultiscale=False, dde=args['dde'])
 
 
 if False: 
   #  --------------------------------------------------
   #  --- make the high-res image robust -2.0 image ---
   #  --------------------------------------------------
-  makeimage(mslist, imageout +'_maskROBUST-2.0'+'uvmin'+str(minuv), pixsize, imsize, channelsout=args['channelsout'], niter=niter, robust=-2.0, minuv=minuv, multiscale=True, predict=False, fitsmask=fitsmask, deepmultiscale=False)
+  makeimage(mslist, imageout +'_maskROBUST-2.0'+'uvmin'+str(minuv), pixsize, imsize, channelsout=args['channelsout'], niter=niter, robust=-2.0, minuv=minuv, multiscale=True, predict=False, fitsmask=fitsmask, deepmultiscale=False, dde=args['dde'])
 
 if True: 
   #  --------------------------------------------------
   #  --- make the high-res image robust -1.25 image ---
   #  --------------------------------------------------
-  makeimage(mslist, imageout +'_maskROBUST-1.25'+'uvmin'+str(minuv), pixsize, imsize, channelsout=args['channelsout'], niter=niter, robust=-1.25, minuv=minuv, multiscale=True, predict=False, fitsmask=fitsmask, deepmultiscale=False)
+  makeimage(mslist, imageout +'_maskROBUST-1.25'+'uvmin'+str(minuv), pixsize, imsize, channelsout=args['channelsout'], niter=niter, robust=-1.25, minuv=minuv, multiscale=True, predict=False, fitsmask=fitsmask, deepmultiscale=False, dde=args['dde'])
 
  
 if args['dotaper']:
@@ -467,7 +502,7 @@ if args['dotaper']:
     #  --------------------------------------
     newniter = adjustniter_for_taper(t, niter)
 
-    makeimage(mslist, imageout +'_ROBUST'+str(robust)+'uvmin'+str(minuv)+'TAPER'+str(t), pixsize, imsize, channelsout=args['channelsout'], niter=newniter, robust=robust, minuv=minuv, predict=False, uvtaper=float(t))
+    makeimage(mslist, imageout +'_ROBUST'+str(robust)+'uvmin'+str(minuv)+'TAPER'+str(t), pixsize, imsize, channelsout=args['channelsout'], niter=newniter, robust=robust, minuv=minuv, predict=False, uvtaper=float(t), dde=args['dde'])
 
     # make a mask
     imagename  = imageout +'_ROBUST'+str(robust)+'uvmin'+str(minuv)+'TAPER'+str(t) + '-MFS-image.fits'
@@ -477,7 +512,7 @@ if args['dotaper']:
     fitsmask = imagename + '.mask.fits'
 
     # re-image with mask
-    makeimage(mslist, imageout +'_maskROBUST'+str(robust)+'uvmin'+str(minuv)+'TAPER'+str(t), pixsize, imsize, channelsout=args['channelsout'], niter=newniter, robust=robust, minuv=minuv, multiscale=True, predict=False, fitsmask=fitsmask, deepmultiscale=False, uvtaper=float(t))
+    makeimage(mslist, imageout +'_maskROBUST'+str(robust)+'uvmin'+str(minuv)+'TAPER'+str(t), pixsize, imsize, channelsout=args['channelsout'], niter=newniter, robust=robust, minuv=minuv, multiscale=True, predict=False, fitsmask=fitsmask, deepmultiscale=False, uvtaper=float(t), dde=args['dde'])
 
 
 
@@ -490,7 +525,7 @@ if args['dotaperkpc']:
       newniter = adjustniter_for_taper(compute_taper(args['z'], float(t)), niter)
       uvtaperkpc = compute_taper(args['z'],float(t))
 
-      makeimage(mslist, imageout +'_ROBUST'+str(robust)+'uvmin'+str(minuv)+'TAPER'+str(t)+'kpc', pixsize, imsize, channelsout=args['channelsout'], niter=newniter, robust=robust, minuv=minuv, predict=False, uvtaper=uvtaperkpc)
+      makeimage(mslist, imageout +'_ROBUST'+str(robust)+'uvmin'+str(minuv)+'TAPER'+str(t)+'kpc', pixsize, imsize, channelsout=args['channelsout'], niter=newniter, robust=robust, minuv=minuv, predict=False, uvtaper=uvtaperkpc, dde=args['dde'])
 
       # make a mask
       imagename  = imageout +'_ROBUST'+str(robust)+'uvmin'+str(minuv)+'TAPER'+str(t)+'kpc' + '-MFS-image.fits'
@@ -500,7 +535,7 @@ if args['dotaperkpc']:
       fitsmask = imagename + '.mask.fits'
 
       # re-image with mask
-      makeimage(mslist, imageout +'_maskROBUST'+str(robust)+'uvmin'+str(minuv)+'TAPER'+str(t)+'kpc', pixsize, imsize, channelsout=args['channelsout'], niter=newniter, robust=robust, minuv=minuv, multiscale=True, predict=False, fitsmask=fitsmask, deepmultiscale=False, uvtaper=uvtaperkpc)
+      makeimage(mslist, imageout +'_maskROBUST'+str(robust)+'uvmin'+str(minuv)+'TAPER'+str(t)+'kpc', pixsize, imsize, channelsout=args['channelsout'], niter=newniter, robust=robust, minuv=minuv, multiscale=True, predict=False, fitsmask=fitsmask, deepmultiscale=False, uvtaper=uvtaperkpc, dde=args['dde'])
   else:
     print ("no redshift for the conversion in kpc")
     #sys.exit()
